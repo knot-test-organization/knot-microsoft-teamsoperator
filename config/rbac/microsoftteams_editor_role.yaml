@@ -1,0 +1,31 @@
+# permissions for end users to edit microsoftteams.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: microsoftteams-editor-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: knot-microsoft-teamsoperator
+    app.kubernetes.io/part-of: knot-microsoft-teamsoperator
+    app.kubernetes.io/managed-by: kustomize
+  name: microsoftteams-editor-role
+rules:
+- apiGroups:
+  - microsoft.teams.nttdata.com
+  resources:
+  - microsoftteams
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - microsoft.teams.nttdata.com
+  resources:
+  - microsoftteams/status
+  verbs:
+  - get

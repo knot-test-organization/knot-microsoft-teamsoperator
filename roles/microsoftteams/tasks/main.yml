@@ -1,0 +1,105 @@
+---
+# tasks file for Microsoft Teams Operator
+- name: Set PAT variable
+  set_fact:
+    PAT: "{{ lookup('env','PAT') }}"
+
+- name: Get the Token variable
+  shell: "kubectl get secret microsoft-graph-token -o jsonpath='{.data.microsoft-graph-token}' | base64 --decode"
+  register: token_output
+
+- name: Set owners list variable
+  set_fact:
+    owners: "{{ owners | default([]) + ['https://graph.microsoft.com/v1.0/users/' + item.azuread_user] }}"
+  loop: "{{ userslist }}"
+  when: item.github_role == "maintainer"
+
+- name: Set members list variable
+  set_fact:
+    members: "{{ members | default([]) + ['https://graph.microsoft.com/v1.0/users/' + item.azuread_user] }}"
+  loop: "{{ userslist }}"
+  when: item.github_role == "member"
+
+- name: List teams
+  uri:
+    url: "https://graph.microsoft.com/v1.0/me/joinedTeams"
+    headers:
+      Authorization: "Bearer {{ token_output.stdout }}"
+    status_code: 200
+  register: listmyteams_response
+  ignore_errors: true
+
+- name: Set team_id variable
+  set_fact:
+    team_id: "{{ item.id }}"
+  loop: "{{ listmyteams_response.json.value }}"
+  when: item.displayName == name
+
+- name: Create group with only leads
+  uri:
+    url: "https://graph.microsoft.com/v1.0/groups"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ token_output.stdout }}"
+    body_format: json
+    body:
+      displayName: "{{ name }}"
+      mailEnabled: true
+      mailNickname: "{{ name }}"
+      securityEnabled: true
+      groupTypes: ["Unified"]
+      owners@odata.bind: "{{ owners }}"
+    status_code: 201
+  register: create_group_leads_response
+  ignore_errors: true
+  when: (team_id is not defined or team_id == "") and (members is not defined or members == "")
+
+- name: Create group
+  uri:
+    url: "https://graph.microsoft.com/v1.0/groups"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ token_output.stdout }}"
+    body_format: json
+    body:
+      displayName: "{{ name }}"
+      mailEnabled: true
+      mailNickname: "{{ name }}"
+      securityEnabled: true
+      groupTypes: ["Unified"]
+      owners@odata.bind: "{{ owners }}"
+      members@odata.bind: "{{ members }}"
+    status_code: 201
+  register: create_group_response
+  ignore_errors: true
+  when: (team_id is not defined or team_id == "") and (members is defined or members != "")
+
+- name: Introduce a delay
+  pause:
+    seconds: 40
+
+- name: Create team from a group
+  uri:
+    url: "https://graph.microsoft.com/v1.0/teams"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ token_output.stdout }}"
+      Content-Type: application/json
+    body_format: json
+    body: '{"template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates/standard","group@odata.bind": "https://graph.microsoft.com/v1.0/groups/{{ create_group_response.json.id }}"}'
+    status_code: 202
+  ignore_errors: true
+  when: (team_id is not defined or team_id == "") and (create_group_response is defined)
+
+- name: Create team with only leads from a group
+  uri:
+    url: "https://graph.microsoft.com/v1.0/teams"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ token_output.stdout }}"
+      Content-Type: application/json
+    body_format: json
+    body: '{"template@odata.bind": "https://graph.microsoft.com/v1.0/teamsTemplates/standard","group@odata.bind": "https://graph.microsoft.com/v1.0/groups/{{ create_group_leads_response.json.id }}"}'
+    status_code: 202
+  ignore_errors: true
+  when: (team_id is not defined or team_id == "") and (create_group_leads_response is defined)

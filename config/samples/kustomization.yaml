@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- microsoft.teams_v1_microsoftteams.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples
